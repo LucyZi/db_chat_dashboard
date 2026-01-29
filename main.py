@@ -23,8 +23,8 @@ CLIENT_SECRET = os.getenv("DATABRICKS_CLIENT_SECRET")
 # ==============================================================================
 # --- 3. 前端模板：将 HTML 和 JavaScript 作为 Python 字符串 ---
 # ==============================================================================
-# 使用 f-string 将上面的配置动态注入到 HTML 中
-HTML_TEMPLATE = f"""
+# 我们使用一个普通的字符串模板和 .format() 方法，以避免 f-string 和 JavaScript 语法冲突
+HTML_TEMPLATE_STRING = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,6 +76,13 @@ HTML_TEMPLATE = f"""
 </html>
 """
 
+# 使用 .format() 方法安全地将配置值插入到模板中
+HTML_TEMPLATE = HTML_TEMPLATE_STRING.format(
+    DATABRICKS_INSTANCE_URL=DATABRICKS_INSTANCE_URL,
+    DASHBOARD_ID=DASHBOARD_ID
+)
+
+
 # ==============================================================================
 # --- 4. 后端逻辑：FastAPI 应用 ---
 # ==============================================================================
@@ -101,7 +108,10 @@ def get_databricks_token():
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"获取 Databricks 令牌失败: {e}")
-        print(f"响应内容: {e.response.text if e.response else 'N/A'}")
+        # 在生产环境中，更详细地记录错误会很有帮助
+        if e.response is not None:
+            print(f"响应状态码: {e.response.status_code}")
+            print(f"响应内容: {e.response.text}")
         raise HTTPException(status_code=502, detail="无法从 Databricks 获取访问令牌。可能是凭证错误或网络问题。")
 
 @app.get("/", response_class=HTMLResponse)
