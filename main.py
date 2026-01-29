@@ -16,15 +16,15 @@ DASHBOARD_ID = "01f0fb8c6b2d1ae4a3e9ebafefa9dc31"
 # --- 2. 安全区域：从环境变量中读取机密信息 ---
 # ==============================================================================
 # 这些值将在 Render 的环境中设置
-DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", DATABRICKS_INSTANCE_URL) # 默认为上面的 URL
+DATABRICKS_HOST = os.getenv("DATABRICKS_HOST", DATABRICKS_INSTANCE_URL)
 CLIENT_ID = os.getenv("DATABRICKS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("DATABRICKS_CLIENT_SECRET")
 
 # ==============================================================================
 # --- 3. 前端模板：将 HTML 和 JavaScript 作为 Python 字符串 ---
 # ==============================================================================
-# 我们使用一个普通的字符串模板和 .format() 方法，以避免 f-string 和 JavaScript 语法冲突
-HTML_TEMPLATE_STRING = """
+# 使用 .format() 方法安全地将配置值插入到模板中
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -43,7 +43,8 @@ HTML_TEMPLATE_STRING = """
     </div>
 
     <script type="module">
-        import {{ DatabricksDashboard }} from "https://cdn.jsdelivr.net/npm/@databricks/aibi-client@0.9.0/dist/databricks-aibi-client.esm.js";
+        // ***** CORRECTED URL: @databricks/bi-client *****
+        import {{ DatabricksDashboard }} from "https://cdn.jsdelivr.net/npm/@databricks/bi-client@0.9.0/dist/databricks-bi-client.esm.js";
 
         async function embedDashboard() {{
             try {{
@@ -74,10 +75,7 @@ HTML_TEMPLATE_STRING = """
     </script>
 </body>
 </html>
-"""
-
-# 使用 .format() 方法安全地将配置值插入到模板中
-HTML_TEMPLATE = HTML_TEMPLATE_STRING.format(
+""".format(
     DATABRICKS_INSTANCE_URL=DATABRICKS_INSTANCE_URL,
     DASHBOARD_ID=DASHBOARD_ID
 )
@@ -90,11 +88,8 @@ app = FastAPI()
 
 @app.get("/api/get-token")
 def get_databricks_token():
-    """
-    使用服务主体凭证，从 Databricks 获取一个临时的 OAuth 访问令牌。
-    """
     if not all([DATABRICKS_HOST, CLIENT_ID, CLIENT_SECRET]):
-        raise HTTPException(status_code=500, detail="服务器环境变量未正确配置。管理员需要设置 DATABRICKS_HOST, DATABRICKS_CLIENT_ID, 和 DATABRICKS_CLIENT_SECRET。")
+        raise HTTPException(status_code=500, detail="服务器环境变量未正确配置。")
 
     auth_url = f"{{DATABRICKS_HOST}}/oauth2/token"
     
@@ -108,15 +103,10 @@ def get_databricks_token():
         return response.json()
     except requests.exceptions.RequestException as e:
         print(f"获取 Databricks 令牌失败: {e}")
-        # 在生产环境中，更详细地记录错误会很有帮助
         if e.response is not None:
-            print(f"响应状态码: {e.response.status_code}")
             print(f"响应内容: {e.response.text}")
-        raise HTTPException(status_code=502, detail="无法从 Databricks 获取访问令牌。可能是凭证错误或网络问题。")
+        raise HTTPException(status_code=502, detail="无法从 Databricks 获取访问令牌。")
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    """
-    当用户访问根 URL 时，直接返回上面定义的 HTML 页面。
-    """
     return HTML_TEMPLATE
